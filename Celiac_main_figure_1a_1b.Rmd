@@ -1,0 +1,74 @@
+---
+title: "Celiac microbiota study Fig1a and 1b"
+author: "Sudarshan A. Shetty, Rahul L. Bodkhe"
+output: html_document
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(data.table)
+library(microbiome)
+library(dplyr)
+library(vegan)
+library(RColorBrewer)
+library(reshape2)
+library(ggpubr)
+
+my_theme <- theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+ps.bxa <- readRDS(file="./phyloseqobjects/ps.bx.rds")
+
+```
+
+
+**Figure 1a**
+
+```{r}
+
+metadf1 <- readRDS("metadf1.rds")
+class(metadf1)
+metadf.bx <- subset(metadf1, Description == "Biopsy")
+
+# create comaprision
+lev1 <- levels(metadf.bx$Diagnosis) # get the variables
+
+# make a pairwise list that we want to compare.
+L.pairs1 <- combn(seq_along(lev1), 2, simplify = FALSE, FUN = function(i)lev1[i])
+
+
+# Shannon
+p2a <- ggboxplot(metadf.bx, x = "Diagnosis", y = "Shannon",
+ fill = "Diagnosis", palette = c("#d7191c", "#fdae61", "#8da0cb")) + stat_compare_means(p.adjust.method = "fdr", comparisons = L.pairs1, method = "wilcox") 
+
+print(p2a)
+
+ggsave("./Figures/Fig1a.pdf", height = 4, width = 10)
+
+```
+
+**Figure 1b**
+
+```{r}
+
+metadf.st <- subset(metadf1, Description == "Stool")
+
+# create comaprision
+lev2 <- levels(metadf.st$Diagnosis) # get the variables
+
+# make a pairwise list that we want to compare.
+L.pairs2 <- combn(seq_along(lev2), 2, simplify = FALSE, FUN = function(i)lev2[i])
+
+
+# Shannon
+p2b <- ggboxplot(metadf.st, x = "Diagnosis", y = "Shannon",
+ fill = "Diagnosis", palette = c("#d7191c", "#fdae61", "#8da0cb")) + stat_compare_means(p.adjust.method = "fdr", comparisons = L.pairs2, method = "wilcox") 
+
+print(p2b)
+
+p2c <- ggarrange( p2a, p2b, ncol = 2 , labels = c("a) Duodenum", "b) Faeces"), common.legend = TRUE, legend = "right")
+
+ggsave("./Figures/Fig_1a_1b.pdf", height = 4, width = 10)
+
+```
+
+
