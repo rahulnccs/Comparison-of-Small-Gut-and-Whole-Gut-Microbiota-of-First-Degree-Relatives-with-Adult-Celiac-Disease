@@ -1,0 +1,266 @@
+---
+title: "Celiac microbiota study Faecal sample DESeq2"
+author: "Sudarshan A. Shetty, Rahul L. Bodkhe"
+output: html_document
+---
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(microbiome)
+library(phyloseq)
+library(RColorBrewer)
+library(DESeq2)
+library(ggpubr)
+
+my_theme <- theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text.y = element_text(face="italic"))
+
+# Create a folder to save results
+dir.create("stool_deseq_results")
+```
+
+
+```{r}
+
+ps.sta <- readRDS(file="./phyloseqobjects/ps.st.rds")
+
+colnames(tax_table(ps.sta)) <-  c("Phylum",  "Class",   "Order",   "Family",  "Genus", "Species")
+
+
+ps.st1.fdr.dc.0 = subset_samples(ps.sta, Diagnosis != "CeD")
+head(sample_data(ps.st1.fdr.dc.0)$Diagnosis, 10)
+
+
+ps.st1.fdr.dc.0.1 = filter_taxa(ps.st1.fdr.dc.0, function(x) sum(x > 3) > (0.05*length(x)), TRUE)
+
+ps.st1.fdr.dc <- ps.st1.fdr.dc.0.1
+
+```
+
+
+```{r}
+meta.st <- meta(ps.st1.fdr.dc)
+diagdds_st.fdr.dc = phyloseq_to_deseq2(ps.st1.fdr.dc, ~ Diagnosis)
+
+ gm_mean = function(x, na.rm=TRUE){
+     exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+ }
+ geoMeans = apply(counts(diagdds_st.fdr.dc), 1, gm_mean)
+ diagdds_st.fdr.dc = estimateSizeFactors(diagdds_st.fdr.dc, geoMeans = geoMeans)
+ dds_st.fdr.dc = DESeq(diagdds_st.fdr.dc, test="Wald", fitType="local")
+
+```
+
+
+
+```{r}
+
+otu.ab1 <- abundances(ps.st1.fdr.dc)
+ res1 = results(dds_st.fdr.dc, cooksCutoff = FALSE)
+ res_tax1 = cbind(as.data.frame(res1), as.matrix(rownames(otu.ab1)), OTU = rownames(res1))
+ 
+ res_tax1 = cbind(as(res_tax1, "data.frame"), as(tax_table(ps.st1.fdr.dc)[rownames(res_tax1), ], "matrix"))
+ 
+ res_tax_sig1 = subset(res_tax1, padj < 0.01 & 0 < abs(log2FoldChange))
+ 
+ res_tax1$Significant <- ifelse(rownames(res_tax1) %in% rownames(res_tax_sig1) , "Yes", "No")
+ 
+ res_tax1$Significant[is.na(res_tax1$Significant)] <- "No"
+ 
+ sig_res1 <- res_tax1[rownames(res_tax_sig1),"OTU"]
+ 
+ res_table1 <- data.frame(res_tax_sig1$baseMean , res_tax_sig1$log2FoldChange,res_tax_sig1$padj)
+ 
+ row.names(res_table1) <- rownames(res_tax_sig1)
+data_to_write1 <-res_tax_sig1[,c("baseMean","log2FoldChange","pvalue","padj","Phylum", "Class", "Order", "Family", "Genus", "Species")]
+
+data_to_write1$DifferentaillyAbundant <-levels(meta.st[,"Diagnosis"])[as.numeric(data_to_write1$log2FoldChange>0)+1]
+
+#data_to_write1[is.na(data_to_write1 <- data_to_write1)] <- "g__"
+
+
+
+# Total numer of OTUs DA
+
+nrow(data_to_write1)
+length(unique(data_to_write1$Genus))
+
+# Which genera
+unique(data_to_write1["Genus"])
+
+# Which Species
+unique(data_to_write1["Species"])
+
+write.csv(data_to_write1,paste("faecesNB_significant_my_method",paste(levels(meta.st$Diagnosis),collapse="_vs_"),".csv",sep=""))
+head(data_to_write1)
+
+df1 <- mutate(data_to_write1, Genus, Genus= paste(data_to_write1$Genus ))
+#length(unique(df1$Family))
+
+fdr.dc.st <- ggplot(df1, aes(log2FoldChange, Species)) + geom_point(aes(color = DifferentaillyAbundant), shape = 21, size = 3) + scale_color_manual(values= c("#fdae61", "#8da0cb")) + theme(axis.text.y = element_text(face="italic")) + my_theme + geom_vline(xintercept = 0)
+fdr.dc.st 
+
+ggsave("./stool_deseq_results/Deseq_st_DC_FDR_st_final.pdf", height = 6, width = 8)
+
+
+```
+
+
+# FDR_vs_CeD
+
+```{r}
+
+
+ps.st1.fdr.ced.0 = subset_samples(ps.sta, Diagnosis != "DC")
+
+ps.st1.fdr.ced <-filter_taxa(ps.st1.fdr.ced.0, function(x) sum(x > 3) > (0.05*length(x)), TRUE)
+ps.st1.fdr.ced
+
+meta.st2 <- meta(ps.st1.fdr.ced)
+diagdds_st.fdr.ced = phyloseq_to_deseq2(ps.st1.fdr.ced, ~ Diagnosis)
+
+gm_mean1 = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+geoMeans1 = apply(counts(diagdds_st.fdr.ced), 1, gm_mean1)
+diagdds_st.fdr.ced = estimateSizeFactors(diagdds_st.fdr.ced, geoMeans = geoMeans1)
+
+
+dds_st.fdr.ced = DESeq(diagdds_st.fdr.ced, test="Wald", fitType="local")
+
+otu.ab2 <- abundances(ps.st1.fdr.ced)
+
+res2 = results(dds_st.fdr.ced, cooksCutoff = FALSE)
+res_tax2 = cbind(as.data.frame(res2), as.matrix(rownames(otu.ab2)), OTU = rownames(res2))
+
+res_tax2 = cbind(as(res_tax2, "data.frame"), as(tax_table(ps.st1.fdr.ced)[rownames(res_tax2), ], "matrix"))
+
+res_tax_sig2 = subset(res_tax2, padj < 0.01 & 0 < abs(log2FoldChange))
+res_tax2$Significant <- ifelse(rownames(res_tax2) %in% rownames(res_tax_sig2) , "Yes", "No")
+res_tax2$Significant[is.na(res_tax2$Significant)] <- "No"
+  
+sig_res2 <- res_tax2[rownames(res_tax_sig2),"OTU"]
+
+res_table2 <- data.frame(res_tax_sig2$baseMean , res_tax_sig2$log2FoldChange,res_tax_sig2$padj)
+
+row.names(res_table2)<- rownames(res_tax_sig2)
+
+data_to_write2 <- res_tax_sig2[,c("baseMean","log2FoldChange","pvalue","padj","Phylum", "Class", "Order", "Family", "Genus", "Species")]
+data_to_write2$DifferentaillyAbundant <-levels(meta.st2[,"Diagnosis"])[as.numeric(data_to_write2$log2FoldChange>0)+1]
+#data_to_write2[is.na(data_to_write2 <- data_to_write2)] <- "g__"
+
+
+# Total numer of OTUs DA
+
+nrow(data_to_write2)
+
+
+# No. of genera DA
+length(unique(data_to_write2$Genus))
+
+# Which genera
+unique(data_to_write2["Genus"])
+
+
+# Which spp
+unique(data_to_write2["Species"])
+
+write.csv(data_to_write2,paste("faecesNB_significant_my_method",paste(levels(meta.st2$Diagnosis),collapse="_vs_"),".csv",sep=""))
+head(data_to_write2)
+
+
+df2 <- mutate(data_to_write2, Genus, Genus= paste(data_to_write2$Genus ))
+
+
+
+fdr.ced.st <- ggplot(df2, aes(log2FoldChange, Species)) + geom_point(aes(color = DifferentaillyAbundant), shape = 21, size = 3) + scale_color_manual(values= c("#d7191c", "#8da0cb")) + theme(axis.text.y = element_text(face="italic")) + my_theme + geom_vline(xintercept = 0)
+fdr.ced.st 
+ggsave("./stool_deseq_results/Deseq_st_CeD_FDR_st.pdf", height = 6, width = 8)
+
+```
+
+
+
+
+
+# CeD vs DC  
+
+```{r}
+
+
+ps.st1.dc.ced.0 = subset_samples(ps.sta, Diagnosis != "FDR")
+
+ps.st1.dc.ced.0 <-filter_taxa(ps.st1.dc.ced.0, function(x) sum(x > 3) > (0.05*length(x)), TRUE)
+ps.st1.dc.ced.0
+
+ps.st1.dc.ced <- ps.st1.dc.ced.0
+
+meta.st3 <- meta(ps.st1.dc.ced)
+diagdds_dc.ced = phyloseq_to_deseq2(ps.st1.dc.ced, ~ Diagnosis)
+
+gm_mean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+geoMeans = apply(counts(diagdds_dc.ced), 1, gm_mean)
+diagdds_dc.ced = estimateSizeFactors(diagdds_dc.ced, geoMeans = geoMeans)
+
+
+
+dds_dc.ced = DESeq(diagdds_dc.ced, test="Wald", fitType="local")
+
+otu.ab3 <- abundances(ps.st1.dc.ced)
+
+res3 = results(dds_dc.ced, cooksCutoff = FALSE)
+res_tax3 = cbind(as.data.frame(res3), as.matrix(rownames(otu.ab3)), OTU = rownames(res3))
+
+res_tax3 = cbind(as(res_tax3, "data.frame"), as(tax_table(ps.st1.dc.ced)[rownames(res_tax3), ], "matrix"))
+
+res_tax_sig3 = subset(res_tax3, padj < 0.01 & 0 < abs(log2FoldChange))
+
+res_tax3$Significant <- ifelse(rownames(res_tax3) %in% rownames(res_tax_sig3) , "Yes", "No")
+
+res_tax3$Significant[is.na(res_tax3$Significant)] <- "No"
+  
+sig_res3 <- res_tax3[rownames(res_tax_sig3),"OTU"]
+
+res_table3 <- data.frame(res_tax_sig3$baseMean , res_tax_sig3$log2FoldChange,res_tax_sig3$padj)
+
+row.names(res_table3)<- rownames(res_tax_sig3)
+
+data_to_write3 <-res_tax_sig3[,c("baseMean","log2FoldChange","pvalue","padj","Phylum", "Class", "Order", "Family", "Genus", "Species")]
+data_to_write3$DifferentaillyAbundant <- levels(meta.st3[,"Diagnosis"])[as.numeric(data_to_write3$log2FoldChange>0)+1]
+
+#data_to_write3[is.na(data_to_write3 <- data_to_write3)] <- "g__"
+
+# Total numer of OTUs DA
+
+nrow(data_to_write3)
+
+
+# No. of genera DA
+length(unique(data_to_write3$Genus))
+
+# Which genera
+unique(data_to_write3["Genus"])
+
+
+# Which Species
+unique(data_to_write3["Species"])
+
+
+write.csv(data_to_write3,paste("faecesNB_significant_My_method",paste(levels(meta.st3$Diagnosis),collapse="_vs_"),".csv",sep=""))
+head(data_to_write3)
+
+
+df3 <- mutate(data_to_write3, Genus, Genus= paste(data_to_write3$Genus ))
+
+dc.ced.st <- ggplot(df3, aes(log2FoldChange, Species)) + geom_point(aes(color = DifferentaillyAbundant), shape = 21, size = 3) + scale_color_manual(values= c("#d7191c", "#fdae61")) + theme(axis.text.y = element_text(face="italic")) + my_theme + geom_vline(xintercept = 0)
+dc.ced.st 
+ggsave("./stool_deseq_results/Deseq_st_CeD_DC_st.pdf", height = 6, width = 8)
+
+deseq.st <- ggarrange(fdr.dc.st, dc.ced.st, fdr.ced.st, ncol = 3, labels = c("a", "b", "c"), legend = "right")
+
+ggsave("Figures/Fig5a_b_c_deseq_st.pdf", height = 6, width = 25)
+```
+
