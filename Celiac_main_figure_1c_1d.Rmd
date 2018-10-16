@@ -1,0 +1,139 @@
+---
+title: "Celiac microbiota study"
+author: "Sudarshan A. Shetty, Rahul L. Bodkhe"
+date: "13 juli 2018"
+output: html_document
+---
+
+
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(ape)
+library(data.table)
+library(microbiome)
+library(dplyr)
+library(vegan)
+library(phyloseq)
+library(RColorBrewer)
+library(reshape2)
+library(ggpubr)
+
+my_theme <- theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+```
+#Open the main phyloseq object and split the analsyis based on sample type
+```{r}
+
+# Open the phyloseq object from a  folder
+ps0 <-  readRDS("./phyloseqobjects/ps0_raw.rds")
+  
+theme_set(theme_bw())
+
+```
+
+
+## split the analysis based on sample type  
+
+### Biopsy/figure 1c
+```{r}
+
+dir.create("./Figures/additional")
+ps.bx.0 <- subset_samples(ps0, Description == "Biopsy")
+ps.bx <- prune_taxa(taxa_sums(ps.bx.0) > 0, ps.bx.0)
+
+saveRDS(ps.bx, "./phyloseqobjects/ps.bx.rds")
+```
+
+
+
+```{r}
+
+ps.bx.rel <- transform(ps.bx, "compositional")
+ps.bx.rel.2 <- core(ps.bx.rel, detection = 0.001, prevalence = 2/nsamples(ps.bx.rel))
+
+
+ord_pcoa_bray_bx = ordinate(ps.bx.rel.2, "PCoA", "bray")
+
+
+bray.dist.bx <- distance(ps.bx.rel.2, "bray") 
+
+adonis(bray.dist.bx ~ Diagnosis, data = meta(ps.bx.rel.2))
+
+
+beta.psbx <- plot_ordination(ps.bx.rel.2, 
+                            ord_pcoa_bray_bx, 
+                            color="Diagnosis") 
+                      
+beta.psbx <-  beta.psbx + scale_color_manual(values = c("#d7191c", "#fdae61", "#8da0cb")) + geom_point(size= 3)
+p3 <- beta.psbx+ ggtitle("Biopsy")  + my_theme 
+
+print(p3)
+
+ggsave("./Figures/fig1c_bx.pdf", height = 4, width = 6)
+
+attach(sample_data(ps.bx.rel.2))
+dist.bx <- phyloseq::distance(otu_table(ps.bx.rel.2), method= 'bray')
+
+bx_anosim<-anosim(dist.bx, Diagnosis, permutations = 999, distance = "bray")
+summary(bx_anosim)
+detach(sample_data(ps.bx.rel.2))
+
+```
+
+
+### Faeces/figure 1d
+
+
+```{r}
+
+ps.st.0 <- subset_samples(ps0, Description == "Stool")
+ps.st <- prune_taxa(taxa_sums(ps.st.0) > 0, ps.st.0)
+saveRDS(ps.st, "./phyloseqobjects/ps.st.rds")
+```
+
+
+```{r}
+
+ps.st.rel <- transform(ps.st, "compositional")
+
+
+
+ps.st.rel.2 <- core(ps.st.rel, detection = 0.001, prevalence = 2/nsamples(ps.st.rel))
+
+ord_pcoa_bray_st = ordinate(ps.st.rel.2, "PCoA", "bray")
+
+bray.dist.st <- distance(ps.st.rel.2, "bray") 
+
+adonis(bray.dist.st ~ Diagnosis, data = meta(ps.st.rel.2))
+
+
+beta.psst <- plot_ordination(ps.st.rel.2, 
+                            ord_pcoa_bray_st, 
+                            color="Diagnosis") 
+                      
+beta.psst <-  beta.psst + scale_color_manual(values = c("#d7191c", "#fdae61", "#8da0cb")) + geom_point(size= 3)
+p4 <- beta.psst + ggtitle("Faeces")  + my_theme 
+
+print(p4)
+
+ggsave("./Figures/fig1d_st.pdf", height = 4, width = 6)
+
+attach(sample_data(ps.st.rel.2))
+dist.st <- phyloseq::distance(otu_table(ps.st.rel.2), method= 'bray')
+
+st_anosim<-anosim(dist.st, Diagnosis, permutations = 999, distance = "bray")
+summary(st_anosim)
+detach(sample_data(ps.st.rel.2))
+
+p5 <- ggarrange(p3, p4, ncol = 2, labels = c("a", "b"), common.legend = TRUE, legend = "right")
+ggsave("./Figures/additional/fig1c_and_1d_st.pdf", height = 6, width = 12)
+
+```
+
+
+```{r}
+
+sessionInfo()
+
+```
+
