@@ -1,0 +1,109 @@
+---
+title: "Celiac_supplementary figure S2 and S4"
+author: "sudarshan A. Shetty, Rahul L. Bodkhe"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::html_clean:
+    highlight: kate
+---
+
+## Libraries  
+
+```{r setup, include=FALSE}
+
+library(ggplot2)
+library(ape)
+library(microbiome)
+library(dplyr)
+library(vegan)
+library(phyloseq)
+library(RColorBrewer)
+library(reshape2)
+library(ggpubr)
+
+my_theme <- theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+```
+
+## Biopsy
+
+**Supplementary figure S2**
+
+```{r, fig.width=8, fig.height=4}
+
+ps.bxa <- readRDS(file="./phyloseqobjects/ps.bx.rds")
+taxic <- as.data.frame(ps.bxa@tax_table) 
+taxic$OTU <- row.names(taxic)
+taxmat <- as.matrix(taxic)
+
+# convert into phyloseq compaitble file.
+new.tax <- tax_table(taxmat)  
+tax_table(ps.bxa) <- new.tax 
+pseq.fam.bx <- aggregate_taxa(ps.bxa, "Kingdom", top = 6)
+tax_table(pseq.fam.bx)[, colnames(tax_table(pseq.fam.bx))] <- gsub(tax_table(pseq.fam.bx)[, 
+                                                                                 colnames(tax_table(pseq.fam.bx))], pattern = "p__", replacement = "")
+
+
+metadf1 <- readRDS("./metadf1.rds")
+# create comaprision
+lev1 <- levels(metadf1$Diagnosis) # get the variables
+
+# make a pairwise list that we want to compare.
+L.pairs1 <- combn(seq_along(lev1), 2, simplify = FALSE, FUN = function(i)lev1[i])
+
+pseq.famrel.bx <- transform(pseq.fam.bx, "compositional")
+ps.bx.m <- psmelt(pseq.famrel.bx)
+ps.bx.m.sub <- subset(ps.bx.m, OTU != "Other")
+px2 <- ggboxplot(ps.bx.m.sub, x = "Diagnosis", y = "Abundance", 
+                 add = "dotplot", 
+                 fill = "Diagnosis", 
+                 palette = c("#d7191c", "#fdae61", "#8da0cb"), 
+                 facet.by = "OTU", 
+                 legend = "right",
+                 ylab = "Relative abundance") + stat_compare_means(comparisons = L.pairs1) + scale_y_log10()
+px2
+
+ggsave("./Supplementary figure top phyla in biopsies.pdf", height = 8, width = 12)
+
+```
+
+
+## Stool
+
+**Supplementary figure S4**
+```{r, fig.width=8, fig.height=4}
+ps.sta <- readRDS(file="./phyloseqobjects/ps.st.rds")
+taxic <- as.data.frame(ps.sta@tax_table) 
+taxic$OTU <- row.names(taxic)
+taxmat <- as.matrix(taxic)
+
+# convert into phyloseq compaitble file.
+new.tax <- tax_table(taxmat)  
+tax_table(ps.sta) <- new.tax 
+pseq.fam <- aggregate_taxa(ps.sta, "Kingdom", top = 6)
+tax_table(pseq.fam)[, colnames(tax_table(pseq.fam))] <- gsub(tax_table(pseq.fam)[, 
+                                                                                 colnames(tax_table(pseq.fam))], pattern = "p__", replacement = "")
+
+pseq.famrel <- transform(pseq.fam, "compositional")
+ps.st.m <- psmelt(pseq.famrel)
+ps.st.m.sub <- subset(ps.st.m, OTU != "Other")
+px1 <- ggboxplot(ps.st.m.sub, x = "Diagnosis", y = "Abundance", 
+                 add = "dotplot", 
+                 fill = "Diagnosis", 
+                 palette = c("#d7191c", "#fdae61", "#8da0cb"), 
+                 facet.by = "OTU", 
+                 legend = "right",
+                 ylab = "Relative abundance") + stat_compare_means(comparisons = L.pairs1) + scale_y_log10()
+px1
+
+ggsave("./Supplementary figure top phyla in faeces .pdf.pdf", height = 8, width = 12)
+
+
+
+
+sessionInfo()
+
+```
+
+
+
