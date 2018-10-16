@@ -1,0 +1,288 @@
+---
+title: "Celiac microbiota study"
+author: "Sudarshan A. Shetty, Rahul L. Bodkhe"
+date: "13 juli 2018"
+output: html_document
+---
+
+
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(ape)
+library(data.table)
+library(microbiome)
+library(dplyr)
+library(vegan)
+library(phyloseq)
+library(RColorBrewer)
+library(reshape2)
+library(ggpubr)
+
+my_theme <- theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+```
+
+```{r}
+
+ps0 <-  readRDS("./input/phylo_object_After_decntm_and_unassigned_genera_discard.rds")
+  
+theme_set(theme_bw())
+
+# store all phyloseq object in a folder
+dir.create("phyloseqobjects")
+
+saveRDS(ps0, "./phyloseqobjects/ps0_raw.rds")
+
+print(ps0)
+
+```
+
+
+Quick look at the sample distribution.  
+
+
+```{r}
+rank_names(ps0)
+table(sample_data(ps0)$Diagnosis, sample_data(ps0)$Description)
+
+```
+
+
+```{r}
+
+#DT::datatable(tax_table(ps0))
+
+# check for library sizes
+
+sort(sample_sums(ps0))
+```
+
+
+
+```{r}
+
+get_taxa_unique(ps0, "Phylum")
+
+OTU1 = as(otu_table(ps0), "matrix")
+# transpose if necessary
+if(taxa_are_rows(ps0) == FALSE){OTU1 <- t(OTU1)}
+# Coerce to data.frame
+OTUdf = as.data.frame(OTU1)
+head(OTUdf)
+
+otu_table(ps0)<- otu_table(as.matrix(OTUdf), taxa_are_rows = T)
+
+plot_taxa_prevalence(ps0,"Phylum")
+```
+
+
+
+
+```{r}
+
+nreads = colSums(otu_table(ps0))
+sample_data(ps0)$nreads = nreads
+qplot(log10(nreads), geom = "histogram")
+
+```
+
+
+```{r}
+
+dir.create("Figures")
+
+sample_data(ps0)$Subject <- rownames(sample_data(ps0))
+
+ps0.rel <- transform(ps0, "compositional")
+
+min(taxa_sums(ps0.rel))
+
+ps0.rel.2 <- core(ps0.rel, detection = 0.001, prevalence = 2/nsamples(ps0))
+
+seed <- 2828
+set.seed(seed)
+
+ord_mds_bray1 <- ordinate(ps0.rel.2, "PCoA", "bray")
+
+#ord_mds_bray1 = ordinate(ps4.log, "MDS", "bray")
+
+beta.ps1 <- plot_ordination(ps0.rel.2, 
+                            ord_mds_bray1, 
+                            color="Description", 
+                            shape = "Diagnosis") 
+                      
+beta.ps1 <-  beta.ps1 + 
+  scale_color_manual(values = c("#1f78b4", "#fdbf6f")) + geom_point(size= 3)
+p2 <- beta.ps1 + ggtitle("PCoA based on Bray-Curtis distance") + theme_bw(base_size = 14) + my_theme 
+print(p2)
+
+
+ggsave("./Figures/fig_1a.pdf", height = 4, width = 7)
+
+
+attach(sample_data(ps0.rel.2))
+dist.all <- phyloseq::distance(otu_table(ps0.rel.2), method= 'bray')
+
+SampleType_anosim<-anosim(dist.all, Description, permutations = 999, distance = "bray")
+summary(SampleType_anosim)
+detach(sample_data(ps0.rel.2))
+
+
+```
+
+
+**Figure 1b**
+
+## Alpha diversity  
+
+
+```{r}
+min(sample_sums(ps0))
+#21663
+
+set.seed(219430)
+ps0.rar <- rarefy_even_depth(ps0, sample.size = min(sample_sums(ps0)))
+
+
+dir.create("alphadiversity_table")
+
+div.all <- estimate_richness(ps0.rar)
+write.csv(div.all, "./alphadiversity_table/alpha_div_.all.csv")
+
+colnames(div.all)
+metadf1 <- meta(ps0.rar)
+metadf1$Observed <- div.all$Observed
+metadf1$Chao1 <- div.all$Chao1
+metadf1$Shannon <- div.all$Shannon
+metadf1$Simpson <- div.all$Simpson
+metadf1$InvSimpson <- div.all$InvSimpson
+
+saveRDS(metadf1, "metadf1.rds")
+
+# create comaprision
+lev0 <- levels(metadf1$Description) # get the variables
+
+# make a pairwise list that we want to compare.
+L.pairs0 <- combn(seq_along(lev0), 2, simplify = FALSE, FUN = function(i)lev0[i])
+
+# Shannon
+plot.pd.vio <- ggboxplot(metadf1, x = "Description", y = "Shannon",
+  fill = "Description", palette = c("#1f78b4", "#fdbf6f")) + stat_compare_means(comparisons = L.pairs0) 
+       #+ stat_compare_means(label.y = max(ibd.div$shannon + 3))
+
+print(plot.pd.vio)
+
+ggsave("./Figures/fig_1b.pdf", height = 4, width = 6)
+
+p0 <- ggarrange(p2,plot.pd.vio, ncol = 2, widths = c(2,1), heights = c(2,0.5), labels = c("a", "b"))
+p0
+ggsave("./Supplementary_Figure S1a n S1b.pdf", height = 4, width = 10)
+
+```
+
+
+## split the analysis based on sample type  
+
+### Biopsy
+```{r}
+
+dir.create("./Figures/additional")
+ps.bx.0 <- subset_samples(ps0, Description == "Biopsy")
+ps.bx <- prune_taxa(taxa_sums(ps.bx.0) > 0, ps.bx.0)
+
+saveRDS(ps.bx, "./phyloseqobjects/ps.bx.rds")
+```
+
+
+
+```{r}
+
+ps.bx.rel <- transform(ps.bx, "compositional")
+ps.bx.rel.2 <- core(ps.bx.rel, detection = 0.001, prevalence = 2/nsamples(ps.bx.rel))
+
+
+ord_pcoa_bray_bx = ordinate(ps.bx.rel.2, "PCoA", "bray")
+
+
+bray.dist.bx <- distance(ps.bx.rel.2, "bray") 
+
+adonis(bray.dist.bx ~ Diagnosis, data = meta(ps.bx.rel.2))
+
+
+beta.psbx <- plot_ordination(ps.bx.rel.2, 
+                            ord_pcoa_bray_bx, 
+                            color="Diagnosis") 
+                      
+beta.psbx <-  beta.psbx + scale_color_manual(values = c("#d7191c", "#fdae61", "#8da0cb")) + geom_point(size= 3)
+p3 <- beta.psbx+ ggtitle("Biopsy")  + my_theme 
+
+print(p3)
+
+ggsave("./Figures/additional/fig1c_bx.pdf", height = 4, width = 6)
+
+attach(sample_data(ps.bx.rel.2))
+dist.bx <- phyloseq::distance(otu_table(ps.bx.rel.2), method= 'bray')
+
+bx_anosim<-anosim(dist.bx, Diagnosis, permutations = 999, distance = "bray")
+summary(bx_anosim)
+detach(sample_data(ps.bx.rel.2))
+
+```
+
+
+### Faeces
+
+
+```{r}
+
+ps.st.0 <- subset_samples(ps0, Description == "Stool")
+ps.st <- prune_taxa(taxa_sums(ps.st.0) > 0, ps.st.0)
+saveRDS(ps.st, "./phyloseqobjects/ps.st.rds")
+```
+
+
+```{r}
+
+ps.st.rel <- transform(ps.st, "compositional")
+
+
+
+ps.st.rel.2 <- core(ps.st.rel, detection = 0.001, prevalence = 2/nsamples(ps.st.rel))
+
+ord_pcoa_bray_st = ordinate(ps.st.rel.2, "PCoA", "bray")
+
+bray.dist.st <- distance(ps.st.rel.2, "bray") 
+
+adonis(bray.dist.st ~ Diagnosis, data = meta(ps.st.rel.2))
+
+
+beta.psst <- plot_ordination(ps.st.rel.2, 
+                            ord_pcoa_bray_st, 
+                            color="Diagnosis") 
+                      
+beta.psst <-  beta.psst + scale_color_manual(values = c("#d7191c", "#fdae61", "#8da0cb")) + geom_point(size= 3)
+p4 <- beta.psst + ggtitle("Faeces")  + my_theme 
+
+print(p4)
+
+ggsave("./Figures/additional/fig1b_st.pdf", height = 4, width = 6)
+
+attach(sample_data(ps.st.rel.2))
+dist.st <- phyloseq::distance(otu_table(ps.st.rel.2), method= 'bray')
+
+st_anosim<-anosim(dist.st, Diagnosis, permutations = 999, distance = "bray")
+summary(st_anosim)
+detach(sample_data(ps.st.rel.2))
+
+p5 <- ggarrange(p3, p4, ncol = 2, labels = c("a", "b"), common.legend = TRUE, legend = "right")
+ggsave("./Figures/additional/fig1d_st.pdf", height = 6, width = 12)
+
+```
+
+
+```{r}
+
+sessionInfo()
+
+```
+
